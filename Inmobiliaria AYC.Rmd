@@ -1,0 +1,2039 @@
+---
+title: "ANÁLISIS DE VIVIENDA A&C"
+author:   
+  - name: Weimar Cortes Montiel
+    affiliation: Pontificia Universidad Javeriana
+    department: Maestría en Ciencia de Datos
+    location: Cali, Colombia
+    email: weimarcortes@javerianacali.edu.co
+bibliography: mybibfile.bib
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: united
+    highlight: tango
+    css: custom_styles.css
+header-includes:
+  - \usepackage{float}
+  - \usepackage{placeins}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center")
+Sys.setlocale("LC_ALL", "es_ES.UTF-8")
+```
+
+```{r message=FALSE, warning=FALSE}
+
+library(paqueteMETODOS)
+library(pander)
+library(psych)
+library(kableExtra)
+library(ggplot2)
+library(broom)
+library(lmtest)
+library(dplyr)
+library(car)
+library(broom)
+library(purrr)
+library(htmltools)
+
+```
+
+# INTRODUCCIÓN
+
+El objetivo de este informe es realizar un análisis exploratorio y modelamiento estadístico de las variables precio de vivienda (en millones de pesos COP) y área construida (en metros cuadrados) para identificar la relación entre estas dos variables clave en el mercado inmobiliario. A través de técnicas de análisis univariado y bivariado, se busca describir el comportamiento individual y conjunto de las variables, empleando gráficos y métricas descriptivas que proporcionen una comprensión profunda de la dinámica del mercado.
+
+Posteriormente, se estima un modelo de regresión lineal simple para examinar la influencia del área de la vivienda sobre el precio, interpretando los coeficientes del modelo y evaluando su significancia mediante intervalos de confianza y pruebas de hipótesis. Se analiza la bondad de ajuste del modelo a través del coeficiente de determinación (R²) y se validan los supuestos del modelo mediante métodos gráficos y pruebas estadísticas, sugiriendo ajustes o transformaciones en caso de incumplimiento de los supuestos.
+
+Además, se estima el precio promedio para un apartamento con un área específica y se evalúa la atractividad de una oferta de mercado comparativa. Por último, se presentan los resultados de los modelos ajustados, destacando el modelo más adecuado y sus implicaciones para la toma de decisiones estratégicas. Este informe proporciona a los directivos de la inmobiliaria una guía informada y basada en datos para optimizar la oferta y valoración de propiedades en función del tamaño y precio de las viviendas, con un respaldo detallado de los análisis realizados en los anexos.
+
+# INVESTIGACIÓN
+
+## ANÁLISIS EXPLORATORIO
+
+Tras realizar una revisión exhaustiva de la base de datos proporcionada, no se detectaron errores. Por lo tanto, no es necesario ejecutar los procesos de normalización y estandarización de la tabla.
+
+
+```{r}
+
+data(vivienda4)
+
+```
+
+
+```{r}
+
+df <- as.data.frame(vivienda4)
+
+colnames(df)[colnames(df) == "preciom"] <- "Precio Millones"
+colnames(df)[colnames(df) == "areaconst"] <- "Área Construida"
+colnames(df)[colnames(df) == "zona"] <- "Zona"
+colnames(df)[colnames(df) == "estrato"] <- "Estrato"
+colnames(df)[colnames(df) == "tipo"] <- "Tipo"
+
+summary_df <- summary(df)
+
+
+kable(summary_df, booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position", "repeat_header"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 1: Resumen Estadístico de las Variables de Vivienda</p>
+
+Se puede informar que las zonas presentan una variabilidad considerable en términos de precios y áreas, sugiriendo que tanto la ubicación como el tipo de propiedad juegan un papel crucial en la determinación del valor de las viviendas. Esta diversidad ofrece opciones para diferentes segmentos del mercado, desde apartamentos más accesibles hasta casas más amplias y exclusivas.
+
+```{r}
+
+ggplot(df, aes(x = `Precio Millones`, y = "")) +
+  geom_boxplot() +
+  stat_summary(fun = median, geom = "point", shape = 20, size = 3, color = "red", fill = "red") +
+  labs(title = "",
+       y = "Precio (millones COP)") +
+  theme_minimal()
+
+```
+<p style="text-align: center;">Fig 1. Diagrama de precio de vivienda</p>
+
+En el diagrama de precio de la vivienda muestra la dispersión de los precios en millones de COP, destacando que la mediana se encuentra alrededor de los 250 millones de COP. Esto indica que la mitad de las viviendas tienen un precio inferior a este valor y la otra mitad lo supera. La concentración de la mayoría de los precios se ubica entre 235 y 260 millones de COP, reflejando una distribución relativamente simétrica.
+
+Sin embargo, se observan valores atípicos hacia la derecha, con precios que superan los 275 millones de COP, llegando incluso hasta los 300 millones o más. Estos valores indican la presencia de algunas propiedades con precios significativamente más altos, posiblemente debido a factores como la ubicación o características exclusivas.
+
+```{r}
+
+ggplot(df, aes(x = `Área Construida`, y = "")) +
+  geom_boxplot() +
+  stat_summary(fun = median, geom = "point", shape = 20, size = 3, color = "red", fill = "red") +
+  labs(title = "",
+       y = "Área (m²)") +
+  theme_minimal()
+
+```
+<p style="text-align: center;">Fig 2. Diagrama de área construida</p>
+
+En el diagrama de área construida de las viviendas muestra cómo se distribuye el tamaño de las propiedades en metros cuadrados. La mediana, representada por la línea roja dentro de la caja, se encuentra alrededor de los 75 m², lo que indica que la mitad de las viviendas tiene un área menor a este valor y la otra mitad mayor.
+
+El rango intercuartílico, que comprende desde aproximadamente 60 m² hasta 100 m², sugiere que la mayoría de las viviendas tienen un tamaño moderado. La caja del boxplot revela una concentración significativa de viviendas en este rango, lo cual es consistente con la demanda de propiedades de tamaño medio.
+
+Existen varios valores atípicos hacia la derecha, lo que indica la presencia de algunas viviendas con áreas mucho mayores, superando los 150 m² y llegando hasta 200 m². Estos valores atípicos sugieren que, aunque menos comunes, existen viviendas de mayor tamaño en la muestra, posiblemente ubicadas en zonas más exclusivas o destinadas a familias numerosas.
+
+```{r}
+
+ggplot(df, aes(x = `Precio Millones`)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  labs(title = "",
+       x = "Precio (millones COP)",
+       y = "Frecuencia") +
+  theme_minimal()
+
+```
+<p style="text-align: center;">Fig 3. Distribución precio de vivienda</p>
+
+La gráfica de distribución del precio de vivienda revela varios aspectos importantes del mercado. En primer lugar, la distribución muestra una asimetría positiva, lo que indica que la mayoría de las viviendas tienen precios más bajos, mientras que los precios más altos son menos frecuentes. La mayor concentración de viviendas se encuentra entre los 225 y 250 millones de pesos, que representan el rango de precios más común.
+
+Además, se observa que a medida que los precios aumentan más allá de este rango, la cantidad de viviendas disminuye significativamente, lo que sugiere que las viviendas de mayor precio son menos comunes en el mercado. Sin embargo, existen algunas propiedades que superan los 300 millones de pesos, aunque en menor proporción.
+
+Este análisis sugiere que el mercado inmobiliario está predominantemente compuesto por viviendas accesibles, con menos oferta en los rangos de precios elevados, lo que refleja la variabilidad y la distribución general de los precios en el mercado. La gráfica también refleja que los precios por encima de los 260 millones de pesos son menos frecuentes, lo que puede indicar una oferta limitada de viviendas en estos rangos más exclusivos.
+
+```{r}
+
+ggplot(df, aes(x = `Área Construida`)) +
+  geom_histogram(bins = 30, fill = "green", alpha = 0.7) +
+  labs(title = "",
+       x = "Área (m²)",
+       y = "Frecuencia") +
+  theme_minimal()
+
+```
+<p style="text-align: center;">Fig 4. Distribución área de la vivienda</p>
+
+La gráfica muestra la distribución del área de las viviendas, destacando que la mayoría de las propiedades tienen tamaños entre 40 y 60 m², con una concentración significativa alrededor de los 50 m², lo que sugiere que predominan las viviendas pequeñas a medianas. La distribución presenta una sesgo a la derecha, indicando que existen viviendas de mayor tamaño, aunque son menos frecuentes. A partir de los 100 m², la cantidad de viviendas disminuye notablemente, mostrando una tendencia hacia áreas más pequeñas. Esta distribución refleja una posible preferencia o necesidad del mercado por viviendas de menor tamaño, probablemente impulsada por factores económicos o urbanísticos que favorecen espacios más reducidos en comparación con viviendas de gran tamaño, las cuales son menos comunes pero aún presentes en la muestra analizada.
+
+## ANÁLISIS EXPLORATORIO BIVARIADO
+
+```{r}
+
+ggplot(df, aes(x = `Área Construida`, y = `Precio Millones`, color = Zona)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "",
+       x = "Área Construida (m²)",
+       y = "Precio (millones COP") +
+  theme_minimal()
+
+```
+<p style="text-align: center;">Fig 5. Relación entre Área Construida y Precio en Millones COP</p>
+
+La gráfica muestra la relación entre el área construida de las viviendas y su precio en millones de COP, diferenciada por zonas de la ciudad. Se observa una tendencia general positiva: a medida que el área construida aumenta, el precio de la vivienda también incrementa, lo que indica una correlación directa entre el tamaño de la vivienda y su valor en el mercado.
+
+Los datos se agrupan en torno a una línea ascendente, lo que refleja que las viviendas más grandes tienden a ser más caras. Sin embargo, existe cierta variabilidad en los precios dentro de las mismas áreas de tamaño, posiblemente influenciada por la ubicación (diferenciada por las zonas: Centro, Norte, Oeste, Oriente y Sur) y otros factores adicionales como la calidad de construcción o el estado del mercado.
+
+Particularmente, las viviendas ubicadas en la Zona Centro y Zona Norte parecen tener precios ligeramente más altos en comparación con otras zonas, sugiriendo un posible efecto de la localización sobre los precios, además del tamaño.
+
+Después de un análisis exhaustivo relacionado con la cantidad de propiedades, descrito en los anexos, se han tomado en consideración las siguientes decisiones:
+
+- La zona centro no será objeto de trabajo.
+
+- La zona norte será trabajada.
+
+- En la zona oeste, solo se llevará a cabo trabajo en relación con los apartamentos.
+
+- La zona oriente no se considerará para el trabajo.
+
+- La zona sur será trabajada.
+
+```{r}
+
+df_centro <- df[df$Zona == "Zona Centro", ]
+df_norte <- df[df$Zona == "Zona Norte", ]
+df_oeste <- df[df$Zona == "Zona Oeste", ]
+df_oriente <- df[df$Zona == "Zona Oriente", ]
+df_sur <- df[df$Zona == "Zona Sur", ]
+
+```
+
+```{r}
+
+correlation_results <- list()
+
+correlation_results$Norte <- df_norte %>%
+  group_by(Tipo) %>%
+  summarise(correlation = cor(`Área Construida`, `Precio Millones`, use = "complete.obs")) %>%
+  mutate(Zona = "Zona Norte")
+
+correlation_apartamentos_oeste <- df_oeste %>%
+  filter(Tipo == "Apartamento") %>%
+  summarise(correlation = cor(`Área Construida`, `Precio Millones`, use = "complete.obs")) %>%
+  mutate(Zona = "Zona Oeste", Tipo = "Apartamento")
+
+correlation_results$Sur <- df_sur %>%
+  group_by(Tipo) %>%
+  summarise(correlation = cor(`Área Construida`, `Precio Millones`, use = "complete.obs")) %>%
+  mutate(Zona = "Zona Sur")
+
+final_results <- bind_rows(correlation_results)
+
+kable(final_results, format = "html", 
+      col.names = c("Tipo", "Correlación", "Zona"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 2: Correlación entre Área Construida y Precio en Millones por Zona y Tipo</p>
+
+Correlación Positiva Alta: Todos los valores de correlación son positivos y relativamente altos, lo que indica una relación fuerte entre el área construida y el precio en todas las zonas y tipos de propiedades. Esto significa que, en general, a mayor área construida, mayor es el precio.
+
+Comparación entre Zonas:
+
+Zona Norte: Las casas tienen una correlación más alta (0.9324) en comparación con los apartamentos (0.8734), lo que sugiere que el precio de las casas en esta zona está más fuertemente relacionado con el área construida que los apartamentos.
+Zona Sur: De manera similar, las casas muestran una correlación mayor (0.9442) que los apartamentos (0.8363), lo que también implica que el precio de las casas en esta zona está más influenciado por el área construida.
+Zonas Comparadas entre Sí:
+
+Apartamentos: Los apartamentos en la Zona Norte tienen una correlación ligeramente mayor (0.8734) que los de la Zona Sur (0.8363), lo que puede indicar que en la Zona Norte el tamaño del apartamento tiene una mayor influencia en el precio que en la Zona Sur.
+Casas: Las casas en la Zona Sur presentan una correlación más alta (0.9442) que en la Zona Norte (0.9324), lo que implica que en la Zona Sur el tamaño de las casas tiene un impacto aún más fuerte en los precios.
+Generalización: Las casas tienden a tener una relación más fuerte entre el área construida y el precio en comparación con los apartamentos, tanto en la Zona Norte como en la Zona Sur.
+
+```{r}
+
+kable(correlation_apartamentos_oeste, format = "html", 
+      col.names = c("Correlación", "Zona", "Tipo"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+<p style="text-align: center;">Tabla 3: Correlación entre Área Construida y Precio en Millones para Apartamentos en la Zona Oeste</p>
+
+Comparación con otras zonas para apartamentos:
+
+La correlación de 0.8386 en la Zona Oeste es bastante cercana a la correlación de los apartamentos en la Zona Sur (0.8363), y algo menor que la correlación de los apartamentos en la Zona Norte (0.8734).
+
+Esto sugiere que el impacto del área construida sobre el precio de los apartamentos en la Zona Oeste es similar al de la Zona Sur, pero ligeramente menor que en la Zona Norte.
+
+Fuerte relación: El valor de 0.8386 sigue indicando una fuerte relación entre el área construida y el precio en la Zona Oeste para apartamentos, lo que significa que, en esta zona, el precio de los apartamentos depende en gran medida del tamaño.
+
+Consistencia: Todas las zonas (Norte, Sur y Oeste) muestran una correlación fuerte para apartamentos, lo que indica que el área construida es un factor importante en la determinación del precio, independientemente de la zona.
+
+## MODELO DE REGRESIÓN LINEAL SIMPLE
+
+### Zona Norte
+
+#### Apartamentos
+```{r}
+
+df_norte_apt <- df_norte[df_norte$Tipo == "Apartamento", ]
+df_norte_casa <- df_norte[df_norte$Tipo == "Casa", ]
+
+
+modelo_apt_norte <- lm(`Precio Millones` ~ `Área Construida`, data = df_norte_apt)
+modelo_casa_norte <- lm(`Precio Millones` ~ `Área Construida`, data = df_norte_casa)
+
+tabla_modelo_apto <- tidy(modelo_apt_norte)
+tabla_modelo_casas <- tidy(modelo_casa_norte)
+
+kable(tabla_modelo_apto, format = "html", 
+      col.names = c("Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+<p style="text-align: center;">Tabla 4: Modelo Lineal para Apartamentos en la Zona Norte</p>
+
+Intercepto:
+
+El valor del intercepto es 200.6376916, lo que indica que, cuando el área construida es 0, el precio estimado es 200.64 millones. Aunque no tiene un significado directo en términos prácticos (ya que un apartamento con área 0 no tiene sentido), es parte de la fórmula del modelo.
+
+Área Construida:
+
+El coeficiente de Área Construida es 0.4886514, lo que significa que por cada unidad adicional de área construida (probablemente metros cuadrados), el precio de un apartamento en la Zona Norte aumentará en 0.488 millones (488,651 pesos o 488.65 miles de pesos).
+
+Errores Estándar:
+
+El error estándar asociado al coeficiente del área construida es 0.0177712, lo que indica que las estimaciones son bastante precisas, dado el pequeño tamaño del error estándar.
+
+Estadístico t:
+
+El valor del estadístico t para el área construida es 27.49677, lo que indica una relación muy fuerte y significativa entre el área construida y el precio.
+
+Valor p:
+
+El valor p es 0 (o prácticamente 0), lo que indica que la relación entre el área construida y el precio es estadísticamente significativa, es decir, no es producto del azar.
+
+#### Casas
+
+```{r}
+
+kable(tabla_modelo_casas, format = "html", 
+      col.names = c("Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+<p style="text-align: center;">Tabla 5: Modelo Lineal para Casas en la Zona Norte</p>
+
+Intercepto:
+
+El valor del intercepto es 192.3380952, lo que indica que, cuando el área construida es 0, el precio estimado sería 192.34 millones. Al igual que en el modelo anterior, este valor no tiene un significado práctico directo, pero es importante para la fórmula del modelo.
+
+Área Construida:
+
+El coeficiente de Área Construida es 0.5567875, lo que significa que por cada unidad adicional de área construida, el precio de una casa en la Zona Norte aumentará en 0.556 millones (o 556,787 pesos).
+
+Errores Estándar:
+
+El error estándar del coeficiente para el área construida es 0.0308314, lo que indica una estimación precisa, aunque es algo más alto en comparación con el modelo de apartamentos.
+
+Estadístico t:
+
+El valor del estadístico t es 18.05909, lo que sigue indicando una relación muy fuerte entre el área construida y el precio, aunque este valor es menor que el del modelo para apartamentos.
+
+Valor p:
+
+El valor p es 0, lo que indica que la relación entre el área construida y el precio es estadísticamente significativa, es decir, no es un resultado debido al azar.
+
+### Zona Oeste
+
+#### Apartamentos
+
+```{r}
+
+df_oeste_apt <- df_oeste[df_oeste$Tipo == "Apartamento", ]
+
+modelo_apt_oeste <- lm(`Precio Millones` ~ `Área Construida`, data = df_oeste_apt)
+
+tabla_modelo_apto <- tidy(modelo_apt_oeste)
+
+kable(tabla_modelo_apto, format = "html", 
+      col.names = c("Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 6: Modelo Lineal para Apartamentos en la Zona Oeste</p>
+
+Intercepto:
+
+El valor del intercepto es 203.7899418, lo que significa que, cuando el área construida es 0, el precio estimado es 203.79 millones. Al igual que en los modelos anteriores, este valor no tiene un significado directo en la realidad práctica, pero es parte de la ecuación del modelo.
+
+Área Construida:
+
+El coeficiente de Área Construida es 0.4695195, lo que indica que por cada unidad adicional de área construida, el precio de un apartamento en la Zona Oeste aumentará en 0.469 millones (469,519 pesos).
+
+Errores Estándar:
+
+El error estándar del coeficiente para el área construida es 0.043127, lo que refleja una estimación razonablemente precisa, aunque este error estándar es mayor que el de los modelos de otras zonas.
+
+Estadístico t:
+
+El valor del estadístico t para el área construida es 10.88692, lo que indica una relación significativa y fuerte entre el área construida y el precio, aunque este valor es menor que en los modelos para la Zona Norte.
+
+Valor p:
+
+El valor p es 0, lo que indica que la relación entre el área construida y el precio es estadísticamente significativa, es decir, no es producto del azar.
+
+### Zona Sur
+
+#### Apartamentos
+```{r}
+
+df_sur_apt <- df_sur[df_sur$Tipo == "Apartamento", ]
+df_sur_casa <- df_sur[df_sur$Tipo == "Casa", ]
+
+
+modelo_apt_sur <- lm(`Precio Millones` ~ `Área Construida`, data = df_sur_apt)
+modelo_casa_sur <- lm(`Precio Millones` ~ `Área Construida`, data = df_sur_casa)
+
+tabla_modelo_apto <- tidy(modelo_apt_sur)
+tabla_modelo_casas <- tidy(modelo_casa_sur)
+
+kable(tabla_modelo_apto, format = "html", 
+      col.names = c("Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+<p style="text-align: center;">Tabla 7: Modelo Lineal para Apartamentos en la Zona Sur</p>
+
+Intercepto:
+
+El intercepto tiene un valor de 199.729685, lo que indica que, cuando el área construida es 0, el precio estimado es 199.73 millones. Este valor, aunque no tiene un significado directo en la realidad práctica, es parte del modelo para ajustar la relación entre el área y el precio.
+
+Área Construida:
+
+El coeficiente de Área Construida es 0.502293, lo que indica que por cada unidad adicional de área construida, el precio de un apartamento en la Zona Sur aumentará en 0.502 millones (502,293 pesos).
+
+Errores Estándar:
+
+El error estándar asociado al coeficiente del área construida es muy bajo, con un valor de 0.0101008, lo que indica que las estimaciones son extremadamente precisas en este modelo.
+
+Estadístico t:
+
+El valor del estadístico t para el área construida es 49.72808, lo que muestra una relación muy fuerte entre el área construida y el precio. Este estadístico es el mayor que hemos visto hasta ahora en comparación con las otras zonas.
+Valor p:
+
+El valor p es 0, lo que indica que la relación entre el área construida y el precio es estadísticamente significativa.
+
+#### Casas
+
+```{r}
+
+kable(tabla_modelo_casas, format = "html", 
+      col.names = c("Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+      caption = NULL) %>%
+  kable_styling("striped", full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 8: Modelo Lineal para Apartamentos en la Zona Sur</p>
+
+Intercepto:
+
+El intercepto tiene un valor de 198.9172012, lo que indica que, cuando el área construida es 0, el precio estimado sería 198.92 millones. Como en los otros modelos, este valor no tiene un significado práctico directo, pero es un componente clave en la ecuación del modelo.
+
+Área Construida:
+
+El coeficiente de Área Construida es 0.5056278, lo que implica que por cada unidad adicional de área construida, el precio de un apartamento en la Zona Sur aumenta en 0.505 millones (505,627 pesos). Este valor es muy similar al que vimos en la tabla anterior de la misma zona.
+
+Errores Estándar:
+
+El error estándar del coeficiente del área construida es extremadamente bajo, 0.0105929, lo que sugiere que la estimación es precisa y confiable.
+
+Estadístico t:
+
+El estadístico t para el área construida es 47.73268, lo que indica una relación extremadamente fuerte y significativa entre el área construida y el precio.
+
+Valor p:
+
+El valor p es 0, lo que indica que esta relación es altamente significativa y no es producto del azar.
+
+## INDICADOR DE R² Y ESTADÍSTICA F
+
+### Zona Norte
+
+#### Apartamentos
+
+```{r}
+
+summary_apt_norte <- summary(modelo_apt_norte)
+r2_apt <- summary_apt_norte$r.squared
+r2_ajus_apt <- summary_apt_norte$adj.r.squared
+f_statistic_apt <- summary_apt_norte$fstatistic[1]
+
+r2_apt <- format(r2_apt, scientific = FALSE, digits = 6)
+r2_ajus_apt <- format(r2_ajus_apt, scientific = FALSE, digits = 6)
+f_statistic_apt <- format(f_statistic_apt, scientific = FALSE, digits = 6)
+
+tabla_metricas_apt <- data.frame(
+  Indicador = c("R²", "R² Ajustado", "Estadística F"),
+  Valor = c(r2_apt, r2_ajus_apt, f_statistic_apt)
+)
+
+kable(tabla_metricas_apt, format = "html", booktabs = TRUE, 
+      caption = NULL) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 9: Métricas del Modelo para Apartamentos en la Zona Norte</p>
+
+R² (0.762883):
+
+Este valor indica que el 76.29% de la variabilidad en el precio de los apartamentos en la Zona Norte puede explicarse por el área construida. Es un valor alto, lo que sugiere que el modelo lineal está capturando una parte significativa de la relación entre estas dos variables.
+
+R² Ajustado (0.761874):
+
+El valor de R² ajustado es 0.761874, lo que significa que, al ajustar por el número de predictores en el modelo, todavía se explica aproximadamente el 76.19% de la variabilidad. Este valor es muy cercano al R², lo que indica que la inclusión del área construida como único predictor es adecuada para este modelo.
+
+Estadística F (756.073):
+
+El valor de la Estadística F es 756.073, lo cual es muy alto y sugiere que el modelo es altamente significativo. Esta métrica mide la relación entre la variabilidad explicada por el modelo y la variabilidad no explicada, y un valor alto indica que el modelo es mucho mejor que un modelo sin predictores.
+
+#### Casas
+
+```{r}
+
+summary_casa_norte <- summary(modelo_casa_norte)
+r2_casa <- summary_casa_norte$r.squared
+r2_ajus_casa <- summary_casa_norte$adj.r.squared
+f_statistic_casa <- summary_casa_norte$fstatistic[1]
+
+r2_casa <- format(r2_casa, scientific = FALSE, digits = 6)
+r2_ajus_casa <- format(r2_ajus_casa, scientific = FALSE, digits = 6)
+f_statistic_casa <- format(f_statistic_casa, scientific = FALSE, digits = 6)
+
+tabla_metricas_casa <- data.frame(
+  Indicador = c("R²", "R² Ajustado", "Estadística F"),
+  Valor = c(r2_casa, r2_ajus_casa, f_statistic_casa)
+)
+
+kable(tabla_metricas_casa, format = "html", booktabs = TRUE, 
+      caption = NULL) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 10: Métricas del Modelo para Casas en la Zona Norte</p>
+
+R² (0.869379):
+
+El valor de R² indica que el 86.94% de la variabilidad en el precio de las casas en la Zona Norte puede ser explicado por el área construida. Este es un valor bastante alto, lo que sugiere que el modelo tiene un buen ajuste y que el área construida es un fuerte predictor del precio.
+
+R² Ajustado (0.866713):
+
+El R² ajustado es 0.866713, lo que significa que, al ajustar por el número de variables en el modelo, todavía se explica aproximadamente el 86.67% de la variabilidad en el precio. La pequeña diferencia entre el R² y el R² ajustado indica que el modelo sigue siendo robusto con solo una variable (área construida).
+
+Estadística F (326.131):
+
+La Estadística F es 326.131, lo que indica una alta significancia estadística del modelo. Este valor tan elevado sugiere que el área construida es un predictor muy relevante para explicar las diferencias de precio de las casas en esta zona, y que el modelo es mejor que uno sin predictores.
+
+### Zona Oeste
+
+#### Apartamentos
+
+```{r}
+
+summary_apt_oeste <- summary(modelo_apt_oeste)
+r2_apt <- summary_apt_oeste$r.squared
+r2_ajus_apt <- summary_apt_oeste$adj.r.squared
+f_statistic_apt <- summary_apt_oeste$fstatistic[1]
+
+r2_apt <- format(r2_apt, scientific = FALSE, digits = 6)
+r2_ajus_apt <- format(r2_ajus_apt, scientific = FALSE, digits = 6)
+f_statistic_apt <- format(f_statistic_apt, scientific = FALSE, digits = 6)
+
+tabla_metricas_apt <- data.frame(
+  Indicador = c("R²", "R² Ajustado", "Estadística F"),
+  Valor = c(r2_apt, r2_ajus_apt, f_statistic_apt)
+)
+
+kable(tabla_metricas_apt, format = "html", booktabs = TRUE, 
+      caption = NULL) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 11: Métricas del Modelo para Apartamentos en la Zona Oeste</p>
+
+R² (0.703308):
+
+El valor de R² indica que el 70.33% de la variabilidad en el precio de los apartamentos en la Zona Oeste puede explicarse por el área construida. Aunque es un valor menor que en la Zona Norte, sigue siendo un valor bastante aceptable, lo que sugiere que el modelo captura de manera razonable la relación entre el área construida y el precio.
+
+R² Ajustado (0.697374):
+
+El valor del R² ajustado es 0.697374, lo que muestra que, incluso ajustando por el número de predictores (en este caso, solo el área construida), el modelo sigue explicando aproximadamente el 69.74% de la variabilidad. La diferencia con el R² es pequeña, lo que indica que el ajuste es sólido.
+
+Estadística F (118.525):
+
+La Estadística F es 118.525, lo que indica una alta significancia del modelo. Aunque es menor que los valores en las otras zonas, sigue siendo lo suficientemente alta como para concluir que el modelo es significativo y que el área construida es un factor relevante para explicar el precio de los apartamentos en la Zona Oeste.
+
+### Zona Sur
+
+#### Apartamentos
+
+```{r}
+
+summary_apt_sur <- summary(modelo_apt_sur)
+r2_apt <- summary_apt_sur$r.squared
+r2_ajus_apt <- summary_apt_sur$adj.r.squared
+f_statistic_apt <- summary_apt_sur$fstatistic[1]
+
+r2_apt <- format(r2_apt, scientific = FALSE, digits = 6)
+r2_ajus_apt <- format(r2_ajus_apt, scientific = FALSE, digits = 6)
+f_statistic_apt <- format(f_statistic_apt, scientific = FALSE, digits = 6)
+
+tabla_metricas_apt <- data.frame(
+  Indicador = c("R²", "R² Ajustado", "Estadística F"),
+  Valor = c(r2_apt, r2_ajus_apt, f_statistic_apt)
+)
+
+kable(tabla_metricas_apt, format = "html", booktabs = TRUE, 
+      caption = NULL) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 12: Métricas del Modelo para Apartamentos en la Zona Sur</p>
+
+R² (0.699368):
+
+El valor de R² indica que el 69.94% de la variabilidad en el precio de los apartamentos en la Zona Sur puede ser explicada por el área construida. Este valor es similar al de la Zona Oeste, lo que indica que el área construida tiene una influencia significativa pero no total sobre el precio en esta zona.
+
+R² Ajustado (0.699085):
+
+El R² ajustado es 0.699085, lo que muestra que, incluso ajustando por el número de predictores, el modelo sigue explicando el 69.91% de la variabilidad en los precios. La diferencia mínima entre el R² y el R² ajustado sugiere que el modelo es sólido.
+
+Estadística F (2472.88):
+
+La estadística F es 2472.88, un valor extremadamente alto, lo que indica que el modelo es altamente significativo. Esto sugiere que la relación entre el área construida y el precio es muy relevante en esta zona, aunque el R² sea menor que en la Zona Norte.
+
+#### Casas
+
+```{r}
+
+summary_casa_sur <- summary(modelo_casa_sur)
+r2_casa <- summary_casa_sur$r.squared
+r2_ajus_casa <- summary_casa_sur$adj.r.squared
+f_statistic_casa <- summary_casa_sur$fstatistic[1]
+
+r2_casa <- format(r2_casa, scientific = FALSE, digits = 6)
+r2_ajus_casa <- format(r2_ajus_casa, scientific = FALSE, digits = 6)
+f_statistic_casa <- format(f_statistic_casa, scientific = FALSE, digits = 6)
+
+tabla_metricas_casa <- data.frame(
+  Indicador = c("R²", "R² Ajustado", "Estadística F"),
+  Valor = c(r2_casa, r2_ajus_casa, f_statistic_casa)
+)
+
+kable(tabla_metricas_casa, format = "html", booktabs = TRUE, 
+      caption = NULL) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 13: Métricas del Modelo para Casa en la Zona Sur</p>
+
+R² (0.891602):
+
+El valor de R² indica que el 89.16% de la variabilidad en el precio de las casas en la Zona Sur puede explicarse por el área construida. Este es un valor muy alto, lo que sugiere que el área construida tiene una influencia muy fuerte en el precio de las casas en esta zona.
+
+R² Ajustado (0.891211):
+
+El valor de R² ajustado es 0.891211, lo que implica que, incluso ajustando por el número de predictores, el modelo sigue explicando el 89.12% de la variabilidad en los precios. La pequeña diferencia entre el R² y el R² ajustado indica que el modelo es muy estable y sólido.
+
+Estadística F (2278.41):
+
+El valor de la Estadística F es 2278.41, lo que sugiere una alta significancia del modelo. Este valor tan elevado indica que el área construida es un predictor extremadamente importante para determinar el precio de las casas en la Zona Sur.
+
+## PRECIO ESTIMADO PARA UN APARTAMENTO DE 110 m², OFERTA Y CONSIDERACIONES
+
+¿Cuál sería el precio promedio estimado para un apartamento de 110 metros cuadrados? Considera entonces con este resultado que un apartamento en la misma zona con 110  metros cuadrados en un precio de 200 millones sería una atractiva esta oferta? ¿Qué consideraciones adicionales se deben tener?.
+
+```{r}
+
+intercepto_norte <- 200.6376916
+coef_area_norte <- 0.4886514
+
+intercepto_oeste <- 203.7899418
+coef_area_oeste <- 0.4695195
+
+intercepto_sur <- 199.729685
+coef_area_sur <- 0.502293
+
+area_construida <- 110
+
+precio_norte <- intercepto_norte + (coef_area_norte * area_construida)
+precio_oeste <- intercepto_oeste + (coef_area_oeste * area_construida)
+precio_sur <- intercepto_sur + (coef_area_sur * area_construida)
+
+precio_oferta <- 200
+
+resultados <- data.frame(
+  Zona = c("Zona Norte", "Zona Oeste", "Zona Sur"),
+  `Precio Estimado (millones)` = c(round(precio_norte, 2), round(precio_oeste, 2), round(precio_sur, 2)),
+  `Oferta (millones)` = rep(precio_oferta, 3),
+  `Diferencia (millones)` = c(round(precio_norte - precio_oferta, 2), round(precio_oeste - precio_oferta, 2), round(precio_sur - precio_oferta, 2)),
+  `Oferta Atractiva` = ifelse(c(precio_norte, precio_oeste, precio_sur) > precio_oferta, "Sí", "No")
+)
+
+kable(resultados, format = "html", col.names = c("Zona", "Precio Estimado (millones)", "Oferta (millones)", "Diferencia (millones)", "Oferta Atractiva")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F, position = "center") %>%
+  column_spec(5, bold = TRUE, color = "white", background = spec_color(c(1, 1, 1), end = 0.7)) 
+
+```
+<p style="text-align: center;">Tabla 14: Comparación de Precios Estimados y Oferta de Apartamentos de 110 m² en Diferentes Zonas</p>
+
+## MODELO DE REGRESIÓN LINEAL SIMPLE
+
+### Zona norte
+
+#### Apartamentos
+
+```{r}
+
+par(mfrow = c(2,2))
+
+plot(modelo_apt_norte$fitted.values, modelo_apt_norte$residuals,
+     xlab = "Valores Ajustados", ylab = "Residuos",
+     main = "Residuos vs Valores Ajustados",
+     cex.main = 0.8)
+abline(h = 0, col = "red")
+
+hist(modelo_apt_norte$residuals, breaks = 20, main = "Histograma de Residuos",
+     xlab = "Residuos", ylab = "Frecuencia", col = "lightblue",
+     cex.main = 0.8)
+
+qqnorm(modelo_apt_norte$residuals, main = "", 
+       xlab = "Cuantiles Teóricos", ylab = "Cuantiles Muestrales")
+qqline(modelo_apt_norte$residuals, col = "red", lwd = 2)
+title(main = "Grafico Q-Q",
+     cex.main = 0.8)
+
+plot(df_norte_apt$`Precio Millones`, modelo_apt_norte$fitted.values,
+     xlab = "Precio Real (Millones)", ylab = "Precio Ajustado (Millones)",
+     main = "Precio Real vs Ajustado",
+     cex.main = 0.8)
+abline(0, 1, col = "red")
+
+```
+<p style="text-align: center;">Fig 6. Gráficos para la Zona Norte: Apartamentos</p>
+
+Gráfico de Residuos vs. Valores Ajustados
+
+En este caso, la dispersión de los puntos parece estar distribuida de manera aleatoria alrededor del eje horizontal (cero), lo cual sugiere que no hay una violación evidente del supuesto de homocedasticidad.
+
+Histograma de Residuos
+
+Idealmente, los residuos deberían seguir una distribución normal. En este gráfico, la distribución parece relativamente simétrica, lo cual es una buena señal de normalidad de los residuos.
+
+Gráfico Q-Q (Quantile-Quantile)
+
+En este caso, la mayoría de los puntos se alinean bien con la línea diagonal, lo que indica que los residuos tienen una distribución cercana a la normal.
+
+Gráfico de Precio Real vs Ajustado
+
+Una línea cercana a la identidad (línea diagonal) sugiere que el modelo predice bien los valores. En este gráfico, hay una buena alineación, lo cual indica que el modelo está funcionando adecuadamente en términos de predicciones.
+
+```{r}
+
+supuestos_modelo <- function(modelo) {
+  shapiro_p <- shapiro.test(modelo$residuals)$p.value
+  
+  bp_p <- bptest(modelo)$p.value
+  
+  dw_p <- dwtest(modelo)$p.value
+  
+  if (length(coefficients(modelo)) > 2) {
+    vif_values <- vif(modelo)
+    max_vif <- max(vif_values)
+  } else {
+    max_vif <- NA
+  }
+  
+  return(data.frame(
+    Normalidad = shapiro_p,
+    Homoscedasticidad = bp_p,
+    Independencia = dw_p,
+    Max_VIF = max_vif
+  ))
+}
+
+```
+
+```{r}
+
+resultados_apt_norte <- supuestos_modelo(modelo_apt_norte)
+resultados_apt_norte$Modelo <- "Norte - Apartamentos"
+
+resultados_totales <- rbind(resultados_apt_norte)
+
+resultados_totales$Prueba_Normalidad <- "Shapiro-Wilk"
+resultados_totales$Prueba_Homoscedasticidad <- "Breusch-Pagan"
+resultados_totales$Prueba_Independencia <- "Durbin-Watson"
+
+resultados_totales_long <- data.frame(
+  Prueba = c("Normalidad", "Homoscedasticidad", "Independencia"),
+  Tipo_Prueba = c("Shapiro-Wilk", "Breusch-Pagan", "Durbin-Watson"),
+  p_valor = c(resultados_totales$Normalidad, resultados_totales$Homoscedasticidad, 
+              resultados_totales$Independencia)
+)
+
+kable(resultados_totales_long, format = "html", booktabs = TRUE,
+      col.names = c("Prueba", "Tipo de Prueba", "p-valor"),
+      caption = "") %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 15: Resultados de los Supuestos del Modelo para Apartamentos de la Zona Norte</p>
+
+p-valor Normalidad: El valor de 0.687 indica que no se puede rechazar la hipótesis nula de normalidad de los residuos, lo cual es una buena señal.
+
+p-valor Homocedasticidad: El valor de 0.575 sugiere que no hay evidencia suficiente para rechazar la homocedasticidad, es decir, la varianza de los errores parece ser constante.
+
+p-valor Independencia: El valor de 0.877 indica que no hay problemas de autocorrelación en los residuos, lo que significa que los errores son independientes entre sí.
+
+```{r}
+
+par(mfrow = c(2,2))
+
+plot(modelo_casa_norte$fitted.values, modelo_casa_norte$residuals,
+     xlab = "Valores Ajustados", ylab = "Residuos",
+     main = "Zona Norte: Casas\nResiduos vs Valores Ajustados",
+     cex.main = 0.8)
+abline(h = 0, col = "red")
+
+hist(modelo_casa_norte$residuals, breaks = 20, main = "Zona Norte: Casas - Histograma de Residuos",
+     xlab = "Residuos", ylab = "Frecuencia", col = "lightblue",
+     cex.main = 0.8)
+
+qqnorm(modelo_casa_norte$residuals, main = "", 
+       xlab = "Cuantiles Teóricos", ylab = "Cuantiles Muestrales")
+qqline(modelo_casa_norte$residuals, col = "red", lwd = 2)
+title(main = "Zona Norte: Casas - Grafico Q-Q",
+     cex.main = 0.8)
+
+plot(df_norte_casa$`Precio Millones`, modelo_casa_norte$fitted.values,
+     xlab = "Precio Real (Millones)", ylab = "Precio Ajustado (Millones)",
+     main = "Zona Norte: Casas - Precio Real vs Ajustado",
+     cex.main = 0.8)
+abline(0, 1, col = "red")
+
+```
+<p style="text-align: center;">Fig 7. Gráficos para la Zona Norte: Casas</p>
+
+Gráfico de Residuos vs. Valores Ajustados
+
+Los residuos parecen estar distribuidos de manera más dispersa en ciertas áreas, lo que podría indicar una ligera heterocedasticidad (es decir, varianza no constante), aunque no es extremadamente grave.
+
+Histograma de Residuos
+
+El histograma muestra que la distribución de los residuos es aproximadamente simétrica, lo cual es un buen indicio de normalidad. Sin embargo, se observa una ligera asimetría hacia la izquierda, pero no es muy pronunciada.
+
+Gráfico Q-Q (Quantile-Quantile)
+
+Este gráfico nos muestra que la mayoría de los puntos siguen la línea diagonal, lo que sugiere que los residuos se distribuyen de manera cercana a una distribución normal.
+Aunque hay algunos puntos que se desvían ligeramente en los extremos, en general, la normalidad de los residuos es aceptable.
+
+Gráfico de Precio Real vs Ajustado
+
+En este gráfico, la relación entre los valores ajustados y los valores reales parece ser bastante lineal, lo cual indica que el modelo se ajusta razonablemente bien a los datos observados.
+
+```{r}
+
+resultados_casa_norte <- supuestos_modelo(modelo_casa_norte)
+resultados_casa_norte$Modelo <- "Norte - Casas"
+
+resultados_totales <- rbind(resultados_casa_norte)
+
+resultados_totales$Prueba_Normalidad <- "Shapiro-Wilk"
+resultados_totales$Prueba_Homoscedasticidad <- "Breusch-Pagan"
+resultados_totales$Prueba_Independencia <- "Durbin-Watson"
+
+resultados_totales_long <- data.frame(
+  Prueba = c("Normalidad", "Homoscedasticidad", "Independencia"),
+  Tipo_Prueba = c("Shapiro-Wilk", "Breusch-Pagan", "Durbin-Watson"),
+  p_valor = c(resultados_totales$Normalidad, resultados_totales$Homoscedasticidad, 
+              resultados_totales$Independencia)
+)
+
+kable(resultados_totales_long, format = "html", booktabs = TRUE,
+      col.names = c("Prueba", "Tipo de Prueba", "p-valor"),
+      caption = "") %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 16: Resultados de los Supuestos del Modelo para Casas de la Zona Norte</p>
+
+p-valor Normalidad: El valor de 0.741 indica que no se puede rechazar la hipótesis nula de normalidad de los residuos, lo cual es una buena señal.
+
+p-valor Homocedasticidad: Con un valor de 0.723, no hay evidencia suficiente para rechazar la homocedasticidad, sugiriendo que la varianza de los errores es relativamente constante.
+
+p-valor Independencia: El valor de 0.327 indica una posible preocupación, ya que es relativamente bajo en comparación con el modelo anterior, lo que podría sugerir alguna autocorrelación leve en los residuos. Sin embargo, no es concluyente de un problema grave.
+
+### Zona Oeste
+
+#### Apartamentos
+
+```{r}
+
+par(mfrow = c(2,2))
+
+plot(modelo_apt_oeste$fitted.values, modelo_apt_oeste$residuals,
+     xlab = "Valores Ajustados", ylab = "Residuos",
+     main = "Residuos vs Valores Ajustados",
+     cex.main = 0.8)
+abline(h = 0, col = "red")
+
+hist(modelo_apt_oeste$residuals, breaks = 20, main = "Histograma de Residuos",
+     xlab = "Residuos", ylab = "Frecuencia", col = "lightblue",
+     cex.main = 0.8)
+
+qqnorm(modelo_apt_oeste$residuals, main = "", 
+       xlab = "Cuantiles Teóricos", ylab = "Cuantiles Muestrales")
+qqline(modelo_apt_oeste$residuals, col = "red", lwd = 2)
+title(main = "Grafico Q-Q",
+     cex.main = 0.8)
+
+plot(df_oeste_apt$`Precio Millones`, modelo_apt_oeste$fitted.values,
+     xlab = "Precio Real (Millones)", ylab = "Precio Ajustado (Millones)",
+     main = "Precio Real vs Ajustado",
+     cex.main = 0.8)
+abline(0, 1, col = "red")
+
+```
+<p style="text-align: center;">Fig 8. Gráficos para la Zona Oeste: Apartamentos</p>
+
+Gráfico de Residuos vs. Valores Ajustados
+
+Este gráfico indica una posible presencia de heterocedasticidad, ya que la dispersión de los residuos no es completamente aleatoria y muestra cierta tendencia en el eje horizontal. Específicamente, hay una tendencia a dispersarse más hacia valores más altos, lo cual podría ser un indicio de varianza no constante en los residuos.
+
+Histograma de Residuos
+
+El histograma muestra una distribución que parece estar sesgada hacia la derecha, lo cual sugiere que la normalidad de los residuos podría estar comprometida.
+La asimetría en la distribución indica que los residuos no siguen perfectamente una distribución normal.
+
+Gráfico Q-Q (Quantile-Quantile)
+
+El gráfico Q-Q muestra una desviación considerable en los extremos, con varios puntos alejándose de la línea diagonal. Esto es una clara señal de que los residuos no se ajustan bien a una distribución normal, lo cual podría afectar la validez de los resultados del modelo.
+
+Gráfico de Precio Real vs Ajustado
+
+La relación entre los valores ajustados y los valores reales no es tan lineal como en los modelos anteriores. Se observa una mayor dispersión de los puntos alrededor de la línea de identidad, lo que sugiere que el modelo no está ajustando de manera tan precisa los valores reales.
+
+```{r}
+
+resultados_apt_oeste <- supuestos_modelo(modelo_apt_oeste)
+resultados_apt_oeste$Modelo <- "Oeste - Apartamentos"
+
+resultados_totales <- rbind(resultados_apt_oeste)
+
+resultados_totales$Prueba_Normalidad <- "Shapiro-Wilk"
+resultados_totales$Prueba_Homoscedasticidad <- "Breusch-Pagan"
+resultados_totales$Prueba_Independencia <- "Durbin-Watson"
+
+resultados_totales_long <- data.frame(
+  Prueba = c("Normalidad", "Homoscedasticidad", "Independencia"),
+  Tipo_Prueba = c("Shapiro-Wilk", "Breusch-Pagan", "Durbin-Watson"),
+  p_valor = c(resultados_totales$Normalidad, resultados_totales$Homoscedasticidad, 
+              resultados_totales$Independencia)
+)
+
+kable(resultados_totales_long, format = "html", booktabs = TRUE,
+      col.names = c("Prueba", "Tipo de Prueba", "p-valor"),
+      caption = "") %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+<p style="text-align: center;">Tabla 17: Resultados de los Supuestos del Modelo para Apartamentos de la Zona Oeste</p>
+
+p-valor Normalidad: El valor de 0.112 sugiere que podríamos rechazar la hipótesis nula de normalidad a niveles de significancia más bajos (como 0.05), lo que indica que los residuos podrían no ser normales.
+
+p-valor Homocedasticidad: El valor de 0.466 indica que no hay evidencia fuerte para rechazar la homocedasticidad, aunque, como se observa en el gráfico de residuos, hay indicios de cierta heterocedasticidad.
+
+p-valor Independencia: El valor de 0.228 es bajo en comparación con los modelos anteriores, lo que sugiere que podría haber una autocorrelación en los residuos.
+
+### Zona Sur
+
+#### Apartamentos
+
+```{r}
+
+par(mfrow = c(2,2))
+
+plot(modelo_apt_sur$fitted.values, modelo_apt_sur$residuals,
+     xlab = "Valores Ajustados", ylab = "Residuos",
+     main = "Residuos vs Valores Ajustados",
+     cex.main = 0.8)
+abline(h = 0, col = "red")
+
+hist(modelo_apt_sur$residuals, breaks = 20, main = "Histograma de Residuos",
+     xlab = "Residuos", ylab = "Frecuencia", col = "lightblue",
+     cex.main = 0.8)
+
+qqnorm(modelo_apt_sur$residuals, main = "", 
+       xlab = "Cuantiles Teóricos", ylab = "Cuantiles Muestrales")
+qqline(modelo_apt_sur$residuals, col = "red", lwd = 2)
+title(main = "Grafico Q-Q",
+     cex.main = 0.8)
+
+plot(df_sur_apt$`Precio Millones`, modelo_apt_sur$fitted.values,
+     xlab = "Precio Real (Millones)", ylab = "Precio Ajustado (Millones)",
+     main = "Precio Real vs Ajustado",
+     cex.main = 0.8)
+abline(0, 1, col = "red")
+
+```
+<p style="text-align: center;">Fig 9. Gráficos para la Zona Sur: Apartamentos</p>
+
+Gráfico de Residuos vs. Valores Ajustados
+
+El gráfico muestra una dispersión relativamente homogénea de los residuos en torno a la línea horizontal, lo que sugiere que la varianza de los residuos es constante, cumpliendo el supuesto de homocedasticidad. Sin embargo, hay una ligera acumulación de puntos en ciertas áreas, pero no es lo suficientemente significativa como para indicar problemas graves de heterocedasticidad.
+
+Histograma de Residuos
+
+La distribución de los residuos es bastante simétrica y muestra una forma que se aproxima a la campana de una distribución normal. Este es un buen indicio de que los residuos del modelo pueden estar distribuidos normalmente.
+
+Gráfico Q-Q (Quantile-Quantile)
+
+La mayoría de los puntos se alinean bien con la línea diagonal, lo cual es una indicación positiva de que los residuos siguen una distribución normal. Este es uno de los mejores gráficos Q-Q de los que hemos analizado hasta ahora, lo que refuerza la idea de la normalidad de los residuos.
+
+Gráfico de Precio Real vs Ajustado
+
+Este gráfico muestra una fuerte alineación entre los valores ajustados y los valores reales, lo que sugiere que el modelo predice bastante bien los precios de los apartamentos. La tendencia lineal es clara, lo cual indica un buen ajuste del modelo.
+
+```{r}
+
+resultados_apt_sur <- supuestos_modelo(modelo_apt_sur)
+resultados_apt_sur$Modelo <- "Sur - Apartamentos"
+
+resultados_totales <- rbind(resultados_apt_sur)
+
+resultados_totales$Prueba_Normalidad <- "Shapiro-Wilk"
+resultados_totales$Prueba_Homoscedasticidad <- "Breusch-Pagan"
+resultados_totales$Prueba_Independencia <- "Durbin-Watson"
+
+resultados_totales_long <- data.frame(
+  Prueba = c("Normalidad", "Homoscedasticidad", "Independencia"),
+  Tipo_Prueba = c("Shapiro-Wilk", "Breusch-Pagan", "Durbin-Watson"),
+  p_valor = c(resultados_totales$Normalidad, resultados_totales$Homoscedasticidad, 
+              resultados_totales$Independencia)
+)
+
+kable(resultados_totales_long, format = "html", booktabs = TRUE,
+      col.names = c("Prueba", "Tipo de Prueba", "p-valor"),
+      caption = "") %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 18: Resultados de los Supuestos del Modelo para Apartamentos de la Zona Sur</p>
+
+p-valor Normalidad: El valor de 0.748 indica que no se puede rechazar la hipótesis nula de normalidad de los residuos, lo que respalda la evidencia de normalidad observada en el gráfico Q-Q.
+
+p-valor Homocedasticidad: El valor de 0.599 sugiere que no hay evidencia suficiente para rechazar la homocedasticidad, lo cual es una buena señal de que la varianza de los errores es constante.
+
+p-valor Independencia: Con un valor de 0.520, no hay indicios fuertes de autocorrelación en los residuos, lo que indica que los errores son independientes entre sí.
+
+#### Casas
+
+```{r}
+
+par(mfrow = c(2,2))
+
+plot(modelo_casa_sur$fitted.values, modelo_casa_sur$residuals,
+     xlab = "Valores Ajustados", ylab = "Residuos",
+     main = "Residuos vs Valores Ajustados",
+     cex.main = 0.8)
+abline(h = 0, col = "red")
+
+hist(modelo_casa_sur$residuals, breaks = 20, main = "Histograma de Residuos",
+     xlab = "Residuos", ylab = "Frecuencia", col = "lightblue",
+     cex.main = 0.8)
+
+qqnorm(modelo_casa_sur$residuals, main = "", 
+       xlab = "Cuantiles Teóricos", ylab = "Cuantiles Muestrales")
+qqline(modelo_casa_sur$residuals, col = "red", lwd = 2)
+title(main = "Grafico Q-Q",
+     cex.main = 0.8)
+
+plot(df_sur_casa$`Precio Millones`, modelo_casa_sur$fitted.values,
+     xlab = "Precio Real (Millones)", ylab = "Precio Ajustado (Millones)",
+     main = "Precio Real vs Ajustado",
+     cex.main = 0.8)
+abline(0, 1, col = "red")
+
+```
+<p style="text-align: center;">Fig 10. Gráficos para la Zona Sur: Casas</p>
+
+Gráfico de Residuos vs. Valores Ajustados
+
+En este gráfico, la dispersión de los residuos es relativamente homogénea alrededor de la línea horizontal, aunque hay ciertas áreas con una mayor concentración de puntos. Esto sugiere que, en general, la varianza de los residuos es constante, cumpliendo el supuesto de homocedasticidad, aunque no de manera perfecta.
+
+Histograma de Residuos
+
+El histograma muestra una distribución que es casi simétrica y con una forma que se asemeja a la de una campana, lo cual es un buen indicio de normalidad en los residuos. La simetría es bastante aceptable, lo que sugiere que los residuos están cerca de seguir una distribución normal.
+
+Gráfico Q-Q (Quantile-Quantile)
+
+El gráfico Q-Q muestra que la mayoría de los puntos están alineados a lo largo de la línea diagonal, lo cual indica que los residuos se distribuyen aproximadamente de forma normal. Aunque hay algunas desviaciones menores en los extremos, la tendencia general es bastante buena y consistente con la normalidad.
+
+Gráfico de Precio Real vs Ajustado
+
+El gráfico muestra una buena alineación entre los valores ajustados y los valores reales, lo que indica que el modelo predice de manera razonablemente precisa los precios. La tendencia lineal es clara, lo cual es una señal de que el modelo se ajusta bien a los datos.
+
+```{r}
+
+resultados_casa_sur <- supuestos_modelo(modelo_casa_sur)
+resultados_casa_sur$Modelo <- "Sur - Casas"
+
+resultados_totales <- rbind(resultados_casa_sur)
+
+resultados_totales$Prueba_Normalidad <- "Shapiro-Wilk"
+resultados_totales$Prueba_Homoscedasticidad <- "Breusch-Pagan"
+resultados_totales$Prueba_Independencia <- "Durbin-Watson"
+
+resultados_totales_long <- data.frame(
+  Prueba = c("Normalidad", "Homoscedasticidad", "Independencia"),
+  Tipo_Prueba = c("Shapiro-Wilk", "Breusch-Pagan", "Durbin-Watson"),
+  p_valor = c(resultados_totales$Normalidad, resultados_totales$Homoscedasticidad, 
+              resultados_totales$Independencia)
+)
+
+kable(resultados_totales_long, format = "html", booktabs = TRUE,
+      col.names = c("Prueba", "Tipo de Prueba", "p-valor"),
+      caption = "") %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 19: Resultados de los Supuestos del Modelo para Casas de la Zona Sur</p>
+
+p-valor Normalidad: El valor de 0.607 indica que no se puede rechazar la hipótesis nula de normalidad de los residuos, lo cual es positivo y consistente con lo observado en el gráfico Q-Q.
+
+p-valor Homocedasticidad: El valor de 0.392 sugiere que no hay evidencia suficiente para rechazar la homocedasticidad, aunque el valor es más bajo que en otros modelos, lo que indica que podría existir una ligera heterocedasticidad.
+
+p-valor Independencia: El valor de 0.837 es alto, lo que indica que no hay problemas de autocorrelación en los residuos, lo cual es una excelente señal de independencia de los errores.
+
+## TRANSFORMACIÓN Y COMPARACIÓN APROPIADA PARA MEJORAR EL AJUSTE Y SUPUESTOS DEL MODELO
+
+### Zona Norte
+
+#### Apartamentos
+
+```{r}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_norte_apt)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_norte_apt)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_norte_apt)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_norte_apt)
+
+resultados_modelos <- data.frame(
+  Modelo = c("Lin-Lin", "Log-Log", "Log-Lin", "Lin-Log"),
+  R2_Ajustado = c(summary(modelo_lin_lin)$adj.r.squared,
+                  summary(modelo_log_log)$adj.r.squared,
+                  summary(modelo_log_lin)$adj.r.squared,
+                  summary(modelo_lin_log)$adj.r.squared)
+)
+
+mejor_modelo <- resultados_modelos %>%
+  mutate(Mejor_R2 = ifelse(R2_Ajustado == max(R2_Ajustado), "Mejor", ""))
+
+kable(mejor_modelo, format = "html", 
+      col.names = c("Modelo", "R² Ajustado", "Mejor R²"), 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+
+evaluar_supuestos <- function(modelo) {
+  normalidad <- shapiro.test(residuals(modelo))$p.value
+  homocedasticidad <- bptest(modelo)$p.value
+  independencia <- dwtest(modelo)$p.value
+  
+  return(data.frame(Normalidad_p = normalidad,
+                    Homocedasticidad_p = homocedasticidad,
+                    Independencia_p = independencia))
+}
+
+resultados_lin_lin <- evaluar_supuestos(modelo_lin_lin)
+resultados_log_log <- evaluar_supuestos(modelo_log_log)
+resultados_log_lin <- evaluar_supuestos(modelo_log_lin)
+resultados_lin_log <- evaluar_supuestos(modelo_lin_log)
+
+resultados_lin_lin$Modelo <- "Lin-Lin"
+resultados_log_log$Modelo <- "Log-Log"
+resultados_log_lin$Modelo <- "Log-Lin"
+resultados_lin_log$Modelo <- "Lin-Log"
+
+resultados_totales <- rbind(resultados_lin_lin, resultados_log_log, resultados_log_lin, resultados_lin_log)
+
+resultados_totales <- resultados_totales %>%
+  mutate(Suma_p_valores = Normalidad_p + Homocedasticidad_p + Independencia_p,
+         Mejor_Modelo = ifelse(Suma_p_valores == max(Suma_p_valores), "Mejor", ""))
+
+resultados_final <- resultados_totales[, c("Modelo", "Normalidad_p", "Homocedasticidad_p", "Independencia_p", "Suma_p_valores", "Mejor_Modelo")]
+
+colnames(resultados_final) <- c("Modelo", "Shapiro-Wilk (Normalidad)", "Breusch-Pagan (Homoscedasticidad)", 
+                                "Durbin-Watson (Independencia)", "Suma de p-valores", "Mejor Modelo")
+
+kable(resultados_final, format = "html", 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 20: Comparación de Modelos de Regresión para Apartamentos en la Zona Norte</p>
+
+Ajuste del Modelo (R² ajustado)
+
+La tabla muestra los resultados del R² ajustado para cuatro modelos de regresión distintos:
+
+Lin-Lin: 0.7618 (marcado como el mejor modelo)
+
+Interpretación:
+
+El modelo Lin-Lin tiene el mejor ajustado (0.7618), lo que indica que este modelo explica mejor la variabilidad de los datos en comparación con los otros modelos.
+Los otros modelos (Log-Log, Log-Lin, y Lin-Log) tienen un ajuste ligeramente inferior, lo que sugiere que la transformación logarítmica no mejora significativamente el ajuste en este caso específico.
+
+Análisis de Supuestos Estadísticos
+
+La segunda tabla analiza los supuestos de los residuos de los modelos utilizando tres pruebas estadísticas:
+
+Lin-Lin: Aunque no destaca en todas las pruebas, el modelo Lin-Lin cumple razonablemente con los supuestos estadísticos, ya que no se observa un problema claro de violación de los supuestos.
+
+Log-Log: (marcado como el mejor modelo)
+Este modelo destaca en la suma de p-valores, indicando un buen cumplimiento de los supuestos estadísticos, lo que lo posiciona como una opción sólida desde el punto de vista de la validez del modelo.
+
+Log-Lin: Este modelo muestra una menor adecuación en la prueba de homocedasticidad, lo que sugiere posibles problemas de heterocedasticidad en los residuos.
+
+Lin-Log: El modelo Lin-Log también presenta dificultades con la homocedasticidad, lo que podría afectar la validez de las inferencias.
+
+#### Casas
+
+```{r}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_norte_casa)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_norte_casa)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_norte_casa)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_norte_casa)
+
+resultados_modelos <- data.frame(
+  Modelo = c("Lin-Lin", "Log-Log", "Log-Lin", "Lin-Log"),
+  R2_Ajustado = c(summary(modelo_lin_lin)$adj.r.squared,
+                  summary(modelo_log_log)$adj.r.squared,
+                  summary(modelo_log_lin)$adj.r.squared,
+                  summary(modelo_lin_log)$adj.r.squared)
+)
+
+mejor_modelo <- resultados_modelos %>%
+  mutate(Mejor_R2 = ifelse(R2_Ajustado == max(R2_Ajustado), "Mejor", ""))
+
+kable(mejor_modelo, format = "html", 
+      col.names = c("Modelo", "R² Ajustado", "Mejor R²"), 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+evaluar_supuestos <- function(modelo) {
+  normalidad <- shapiro.test(residuals(modelo))$p.value
+  homocedasticidad <- bptest(modelo)$p.value
+  independencia <- dwtest(modelo)$p.value
+  
+  return(data.frame(Normalidad_p = normalidad,
+                    Homocedasticidad_p = homocedasticidad,
+                    Independencia_p = independencia))
+}
+
+resultados_lin_lin <- evaluar_supuestos(modelo_lin_lin)
+resultados_log_log <- evaluar_supuestos(modelo_log_log)
+resultados_log_lin <- evaluar_supuestos(modelo_log_lin)
+resultados_lin_log <- evaluar_supuestos(modelo_lin_log)
+
+resultados_lin_lin$Modelo <- "Lin-Lin"
+resultados_log_log$Modelo <- "Log-Log"
+resultados_log_lin$Modelo <- "Log-Lin"
+resultados_lin_log$Modelo <- "Lin-Log"
+
+resultados_totales <- rbind(resultados_lin_lin, resultados_log_log, resultados_log_lin, resultados_lin_log)
+
+resultados_totales <- resultados_totales %>%
+  mutate(Suma_p_valores = Normalidad_p + Homocedasticidad_p + Independencia_p,
+         Mejor_Modelo = ifelse(Suma_p_valores == max(Suma_p_valores), "Mejor", ""))
+
+resultados_final <- resultados_totales[, c("Modelo", "Normalidad_p", "Homocedasticidad_p", "Independencia_p", "Suma_p_valores", "Mejor_Modelo")]
+
+colnames(resultados_final) <- c("Modelo", "Shapiro-Wilk (Normalidad)", "Breusch-Pagan (Homoscedasticidad)", 
+                                "Durbin-Watson (Independencia)", "Suma de p-valores", "Mejor Modelo")
+
+kable(resultados_final, format = "html", 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 21: Comparación de Modelos de Regresión para Casas en la Zona Norte</p>
+
+Ajuste del Modelo (R² ajustado)
+
+Lin-Lin: 0.8667 (marcado como el mejor modelo)
+
+Interpretación:
+
+El modelo Lin-Lin tiene el mejor R² ajustado (0.8667), lo que indica que este modelo explica mejor la variabilidad de los datos en comparación con los otros modelos.
+Los otros modelos (Log-Log, Log-Lin y Lin-Log) tienen un ajuste ligeramente inferior, lo que sugiere que, en este caso, las transformaciones logarítmicas no mejoran significativamente el ajuste.
+
+Análisis de Supuestos Estadísticos
+
+Lin-Lin: Aunque cumple razonablemente con los supuestos estadísticos, muestra un p-valor algo bajo para la independencia, lo que podría indicar una ligera autocorrelación.
+
+Log-Log: Este modelo presenta una menor adecuación en las pruebas de normalidad y homocedasticidad en comparación con otros modelos.
+
+Log-Lin: (marcado como el mejor modelo) Este modelo es el que mejor cumple con los supuestos estadísticos, ya que tiene la mayor suma de p-valores, lo que indica una mayor validez del modelo en términos de normalidad, homocedasticidad e independencia.
+
+Lin-Log: Aunque presenta un buen cumplimiento de los supuestos estadísticos, no es el mejor modelo en comparación con el Log-Lin.
+
+### Zona Oeste
+
+#### Apartamentos
+
+```{r}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_oeste_apt)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_oeste_apt)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_oeste_apt)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_oeste_apt)
+
+resultados_modelos <- data.frame(
+  Modelo = c("Lin-Lin", "Log-Log", "Log-Lin", "Lin-Log"),
+  R2_Ajustado = c(summary(modelo_lin_lin)$adj.r.squared,
+                  summary(modelo_log_log)$adj.r.squared,
+                  summary(modelo_log_lin)$adj.r.squared,
+                  summary(modelo_lin_log)$adj.r.squared)
+)
+
+mejor_modelo <- resultados_modelos %>%
+  mutate(Mejor_R2 = ifelse(R2_Ajustado == max(R2_Ajustado), "Mejor", ""))
+
+kable(mejor_modelo, format = "html", 
+      col.names = c("Modelo", "R² Ajustado", "Mejor R²"), 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+evaluar_supuestos <- function(modelo) {
+  normalidad <- shapiro.test(residuals(modelo))$p.value
+  homocedasticidad <- bptest(modelo)$p.value
+  independencia <- dwtest(modelo)$p.value
+  
+  return(data.frame(Normalidad_p = normalidad,
+                    Homocedasticidad_p = homocedasticidad,
+                    Independencia_p = independencia))
+}
+
+resultados_lin_lin <- evaluar_supuestos(modelo_lin_lin)
+resultados_log_log <- evaluar_supuestos(modelo_log_log)
+resultados_log_lin <- evaluar_supuestos(modelo_log_lin)
+resultados_lin_log <- evaluar_supuestos(modelo_lin_log)
+
+resultados_lin_lin$Modelo <- "Lin-Lin"
+resultados_log_log$Modelo <- "Log-Log"
+resultados_log_lin$Modelo <- "Log-Lin"
+resultados_lin_log$Modelo <- "Lin-Log"
+
+resultados_totales <- rbind(resultados_lin_lin, resultados_log_log, resultados_log_lin, resultados_lin_log)
+
+resultados_totales <- resultados_totales %>%
+  mutate(Suma_p_valores = Normalidad_p + Homocedasticidad_p + Independencia_p,
+         Mejor_Modelo = ifelse(Suma_p_valores == max(Suma_p_valores), "Mejor", ""))
+
+resultados_final <- resultados_totales[, c("Modelo", "Normalidad_p", "Homocedasticidad_p", "Independencia_p", "Suma_p_valores", "Mejor_Modelo")]
+
+colnames(resultados_final) <- c("Modelo", "Shapiro-Wilk (Normalidad)", "Breusch-Pagan (Homoscedasticidad)", 
+                                "Durbin-Watson (Independencia)", "Suma de p-valores", "Mejor Modelo")
+
+kable(resultados_final, format = "html", 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+```
+<p style="text-align: center;">Tabla 22: Modelos para Apartamentos en la Zona Oeste</p>
+
+Ajuste del Modelo (R² ajustado)
+
+Lin-Log: 0.7089 (marcado como el mejor modelo)
+
+Interpretación:
+
+El modelo Lin-Log tiene el mejor R² ajustado, lo que indica que este modelo explica mejor la variabilidad de los datos en comparación con los otros modelos.
+Los otros modelos (Lin-Lin, Log-Log, y Log-Lin) tienen un ajuste ligeramente inferior, lo que sugiere que, en este caso, las transformaciones logarítmicas en una de las variables mejoran el ajuste del modelo.
+
+Análisis de Supuestos Estadísticos
+
+Lin-Lin: Aunque cumple razonablemente con los supuestos estadísticos, muestra un problema significativo con la normalidad de los residuos, lo cual es indicado por el bajo p-valor en la prueba de Shapiro-Wilk.
+
+Log-Log: Este modelo muestra una menor adecuación en las pruebas de normalidad y homocedasticidad en comparación con otros modelos.
+
+Log-Lin: Este modelo también tiene problemas de normalidad y muestra el menor ajuste a los supuestos en comparación con los otros modelos.
+
+Lin-Log (marcado como el mejor modelo): Este modelo es el que mejor cumple con los supuestos estadísticos, ya que tiene la mayor suma de p-valores, lo que indica una mayor validez del modelo en términos de normalidad, homocedasticidad e independencia.
+
+### Zona Sur
+
+#### Apartamentos
+
+```{r}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_sur_apt)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_sur_apt)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_sur_apt)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_sur_apt)
+
+resultados_modelos <- data.frame(
+  Modelo = c("Lin-Lin", "Log-Log", "Log-Lin", "Lin-Log"),
+  R2_Ajustado = c(summary(modelo_lin_lin)$adj.r.squared,
+                  summary(modelo_log_log)$adj.r.squared,
+                  summary(modelo_log_lin)$adj.r.squared,
+                  summary(modelo_lin_log)$adj.r.squared)
+)
+
+mejor_modelo <- resultados_modelos %>%
+  mutate(Mejor_R2 = ifelse(R2_Ajustado == max(R2_Ajustado), "Mejor", ""))
+
+kable(mejor_modelo, format = "html", 
+      col.names = c("Modelo", "R² Ajustado", "Mejor R²"), 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+evaluar_supuestos <- function(modelo) {
+  normalidad <- shapiro.test(residuals(modelo))$p.value
+  homocedasticidad <- bptest(modelo)$p.value
+  independencia <- dwtest(modelo)$p.value
+  
+  return(data.frame(Normalidad_p = normalidad,
+                    Homocedasticidad_p = homocedasticidad,
+                    Independencia_p = independencia))
+}
+
+resultados_lin_lin <- evaluar_supuestos(modelo_lin_lin)
+resultados_log_log <- evaluar_supuestos(modelo_log_log)
+resultados_log_lin <- evaluar_supuestos(modelo_log_lin)
+resultados_lin_log <- evaluar_supuestos(modelo_lin_log)
+
+resultados_lin_lin$Modelo <- "Lin-Lin"
+resultados_log_log$Modelo <- "Log-Log"
+resultados_log_lin$Modelo <- "Log-Lin"
+resultados_lin_log$Modelo <- "Lin-Log"
+
+resultados_totales <- rbind(resultados_lin_lin, resultados_log_log, resultados_log_lin, resultados_lin_log)
+
+resultados_totales <- resultados_totales %>%
+  mutate(Suma_p_valores = Normalidad_p + Homocedasticidad_p + Independencia_p,
+         Mejor_Modelo = ifelse(Suma_p_valores == max(Suma_p_valores), "Mejor", ""))
+
+resultados_final <- resultados_totales[, c("Modelo", "Normalidad_p", "Homocedasticidad_p", "Independencia_p", "Suma_p_valores", "Mejor_Modelo")]
+
+colnames(resultados_final) <- c("Modelo", "Shapiro-Wilk (Normalidad)", "Breusch-Pagan (Homoscedasticidad)", 
+                                "Durbin-Watson (Independencia)", "Suma de p-valores", "Mejor Modelo")
+
+kable(resultados_final, format = "html", 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+```
+
+<p style="text-align: center;">Tabla 23: Modelos para Apartamentos en la Zona Sur</p>
+
+Ajuste del Modelo (R² ajustado)
+
+Lin-Lin: 0.6991 (marcado como el mejor modelo)
+
+Interpretación:
+
+El modelo Lin-Lin tiene el mejor R² ajustado, lo que indica que este modelo explica mejor la variabilidad de los datos en comparación con los otros modelos.
+Los otros modelos (Log-Log, Log-Lin y Lin-Log) tienen un ajuste inferior, lo que sugiere que, en este caso, las transformaciones logarítmicas no mejoran significativamente el ajuste.
+
+Análisis de Supuestos Estadísticos
+
+Lin-Lin (marcado como el mejor modelo): Este modelo cumple razonablemente con los supuestos estadísticos, con una suma de p-valores más alta, lo que indica un mejor ajuste a los supuestos de normalidad, homocedasticidad e independencia.
+
+Log-Log: Este modelo muestra una menor adecuación en la prueba de normalidad y homocedasticidad en comparación con otros modelos, lo que puede indicar problemas en el ajuste de los residuos.
+
+Log-Lin: Este modelo presenta dificultades significativas con la homocedasticidad, lo que sugiere que la variabilidad de los residuos no es constante.
+
+Lin-Log: Este modelo muestra problemas con todos los supuestos estadísticos, especialmente con la normalidad, lo que lo hace menos adecuado en comparación con los otros modelos.
+
+#### Casas
+
+```{r}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_sur_casa)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_sur_casa)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_sur_casa)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_sur_casa)
+
+resultados_modelos <- data.frame(
+  Modelo = c("Lin-Lin", "Log-Log", "Log-Lin", "Lin-Log"),
+  R2_Ajustado = c(summary(modelo_lin_lin)$adj.r.squared,
+                  summary(modelo_log_log)$adj.r.squared,
+                  summary(modelo_log_lin)$adj.r.squared,
+                  summary(modelo_lin_log)$adj.r.squared)
+)
+
+mejor_modelo <- resultados_modelos %>%
+  mutate(Mejor_R2 = ifelse(R2_Ajustado == max(R2_Ajustado), "Mejor", ""))
+
+kable(mejor_modelo, format = "html", 
+      col.names = c("Modelo", "R² Ajustado", "Mejor R²"), 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+evaluar_supuestos <- function(modelo) {
+  normalidad <- shapiro.test(residuals(modelo))$p.value
+  homocedasticidad <- bptest(modelo)$p.value
+  independencia <- dwtest(modelo)$p.value
+  
+  return(data.frame(Normalidad_p = normalidad,
+                    Homocedasticidad_p = homocedasticidad,
+                    Independencia_p = independencia))
+}
+
+resultados_lin_lin <- evaluar_supuestos(modelo_lin_lin)
+resultados_log_log <- evaluar_supuestos(modelo_log_log)
+resultados_log_lin <- evaluar_supuestos(modelo_log_lin)
+resultados_lin_log <- evaluar_supuestos(modelo_lin_log)
+
+resultados_lin_lin$Modelo <- "Lin-Lin"
+resultados_log_log$Modelo <- "Log-Log"
+resultados_log_lin$Modelo <- "Log-Lin"
+resultados_lin_log$Modelo <- "Lin-Log"
+
+resultados_totales <- rbind(resultados_lin_lin, resultados_log_log, resultados_log_lin, resultados_lin_log)
+
+resultados_totales <- resultados_totales %>%
+  mutate(Suma_p_valores = Normalidad_p + Homocedasticidad_p + Independencia_p,
+         Mejor_Modelo = ifelse(Suma_p_valores == max(Suma_p_valores), "Mejor", ""))
+
+resultados_final <- resultados_totales[, c("Modelo", "Normalidad_p", "Homocedasticidad_p", "Independencia_p", "Suma_p_valores", "Mejor_Modelo")]
+
+colnames(resultados_final) <- c("Modelo", "Shapiro-Wilk (Normalidad)", "Breusch-Pagan (Homoscedasticidad)", 
+                                "Durbin-Watson (Independencia)", "Suma de p-valores", "Mejor Modelo")
+
+kable(resultados_final, format = "html", 
+      caption = "") %>%
+  kable_styling("striped", full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 24: Modelos para Casas en la Zona Sur</p>
+
+
+Ajuste del Modelo (R² ajustado)
+
+Lin-Lin: 0.8911 (marcado como el mejor modelo)
+
+Interpretación:
+
+El modelo Lin-Lin tiene el mejor ajustado, lo que indica que este modelo explica mejor la variabilidad de los datos en comparación con los otros modelos.
+Los otros modelos (Log-Log, Log-Lin y Lin-Log) tienen un ajuste ligeramente inferior, lo que sugiere que, en este caso, las transformaciones logarítmicas no mejoran significativamente el ajuste.
+
+Análisis de Supuestos Estadísticos
+
+Lin-Lin (marcado como el mejor modelo): Este modelo es el que mejor cumple con los supuestos estadísticos, mostrando una buena adecuación en términos de normalidad, homocedasticidad e independencia, lo que lo convierte en una opción sólida.
+
+Log-Log: Este modelo muestra problemas significativos con la homocedasticidad, lo que indica que la variabilidad de los residuos no es constante, afectando la validez del modelo.
+
+Log-Lin: Aunque cumple razonablemente con los supuestos, su desempeño es inferior en comparación con el modelo Lin-Lin, especialmente en la prueba de homocedasticidad.
+
+Lin-Log: Este modelo también presenta dificultades con la homocedasticidad y no supera al modelo Lin-Lin en términos de cumplimiento de los supuestos estadísticos.
+
+## COMPARACIÓN DE MODELOS
+
+### Zona Norte
+
+#### Apartamentos
+
+```{r}
+
+modelos_a_resaltar <- c("Lin-Lin", "Log-Log")
+
+extraer_coeficientes <- function(modelo, nombre_modelo) {
+  coefs <- summary(modelo)$coefficients
+  data.frame(
+    Modelo = nombre_modelo,
+    Término = rownames(coefs),
+    Estimación = formatC(coefs[, "Estimate"], format = "f", digits = 4),
+    `Error Estándar` = formatC(coefs[, "Std. Error"], format = "f", digits = 4),
+    `Estadístico t` = formatC(coefs[, "t value"], format = "f", digits = 4),
+    `Valor p` = formatC(coefs[, "Pr(>|t|)"], format = "f", digits = 4)
+  )
+}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_norte_apt)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_norte_apt)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_norte_apt)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_norte_apt)
+
+tabla_lin_lin <- extraer_coeficientes(modelo_lin_lin, "Lin-Lin")
+tabla_log_log <- extraer_coeficientes(modelo_log_log, "Log-Log")
+tabla_log_lin <- extraer_coeficientes(modelo_log_lin, "Log-Lin")
+tabla_lin_log <- extraer_coeficientes(modelo_lin_log, "Lin-Log")
+
+tabla_comparativa <- rbind(tabla_lin_lin, tabla_log_log, tabla_log_lin, tabla_lin_log)
+
+tabla_comparativa %>%
+  kable(format = "html", 
+        col.names = c("Modelo", "Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+        caption = "") %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(which(tabla_comparativa$Modelo %in% modelos_a_resaltar), background = "#DFF0D8")
+
+```
+<p style="text-align: center;">Tabla 25: Comparación de modelos para Apartamentos en la Zona Norte</p>
+
+Comparación de Modelos de Regresión para Apartamentos en la Zona Norte
+
+Ecuación del Modelo Lin-Lin
+
+Esta es una ecuación de regresión lineal directa que indica una relación positiva entre el área construida y el precio del apartamento, con un intercepto de 200.6377.
+
+Ecuación del Modelo Log-Log
+
+El modelo Log-Log se interpreta como una relación elástica. Un cambio porcentual en el área construida resulta en un cambio porcentual proporcional en el precio. Este tipo de modelo es útil para identificar relaciones no lineales de escala.
+
+
+```{r}
+
+equacion_lin_lin <- div(
+  h3("Ecuación del Modelo Lin-Lin"),
+  tags$p(HTML("Precio Millones = 200.6377 + 0.4887 &times; Área Construida"))
+)
+
+equacion_log_log <- div(
+  h3("Ecuación del Modelo Log-Log"),
+  tags$p(HTML("log(Precio Millones) = 4.6912 + 0.1812 &times; log(Área Construida)")),
+  tags$p(HTML("Forma Exponencial del Modelo Log-Log:")),
+  tags$p(HTML("Precio Millones = exp(4.6912) &times; (Área Construida)<sup>0.1812</sup>"))
+)
+
+browsable(tagList(equacion_lin_lin, equacion_log_log))
+
+```
+
+Mejor Modelo en términos de Ajuste y Supuestos: Los modelos Lin-Lin y Log-Log son las mejores opciones, según se destaca en la tabla y las ecuaciones presentadas.
+
+Lin-Lin: Proporciona una relación directa y fácil de interpretar entre el área construida y el precio.
+
+Log-Log: Ofrece una perspectiva diferente basada en elasticidades, útil para análisis en escalas logarítmicas.
+
+#### Casas
+
+```{r}
+
+modelos_a_resaltar <- c("Lin-Lin", "Log-Lin")
+
+extraer_coeficientes <- function(modelo, nombre_modelo) {
+  coefs <- summary(modelo)$coefficients
+  data.frame(
+    Modelo = nombre_modelo,
+    Término = rownames(coefs),
+    Estimación = formatC(coefs[, "Estimate"], format = "f", digits = 4),
+    `Error Estándar` = formatC(coefs[, "Std. Error"], format = "f", digits = 4),
+    `Estadístico t` = formatC(coefs[, "t value"], format = "f", digits = 4),
+    `Valor p` = formatC(coefs[, "Pr(>|t|)"], format = "f", digits = 4)
+  )
+}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_norte_casa)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_norte_casa)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_norte_casa)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_norte_casa)
+
+tabla_lin_lin <- extraer_coeficientes(modelo_lin_lin, "Lin-Lin")
+tabla_log_log <- extraer_coeficientes(modelo_log_log, "Log-Log")
+tabla_log_lin <- extraer_coeficientes(modelo_log_lin, "Log-Lin")
+tabla_lin_log <- extraer_coeficientes(modelo_lin_log, "Lin-Log")
+
+tabla_comparativa <- rbind(tabla_lin_lin, tabla_log_log, tabla_log_lin, tabla_lin_log)
+
+tabla_comparativa %>%
+  kable(format = "html", 
+        col.names = c("Modelo", "Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+        caption = "") %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(which(tabla_comparativa$Modelo %in% modelos_a_resaltar), background = "#DFF0D8")
+
+```
+
+<p style="text-align: center;">Tabla 26: Comparación de modelos para Casas en la Zona Norte</p>
+
+Ecuación del Modelo Lin-Lin: 
+
+Esta ecuación representa una relación lineal directa, donde el precio en millones incrementa de forma constante con el aumento del área construida.
+
+Ecuación del Modelo Log-Lin: 
+
+Este modelo implica una relación exponencial entre el área construida y el precio, lo que sugiere que el precio aumenta de manera exponencial a medida que crece el área construida.
+
+```{r}
+
+equacion_lin_lin <- div(
+  h3("Ecuación del Modelo Lin-Lin"),
+  tags$p(HTML("Precio Millones = 192.3381 + 0.5568 &times; Área Construida"))
+)
+
+equacion_log_lin <- div(
+  h3("Ecuación del Modelo Log-Lin"),
+  tags$p(HTML("log(Precio Millones) = 5.3021 + 0.0021 &times; Área Construida")),
+  tags$p(HTML("Forma Exponencial del Modelo Log-Lin:")),
+  tags$p(HTML("Precio Millones = exp(5.3021) &times; exp(0.0021 &times; Área Construida)"))
+)
+
+browsable(tagList(equacion_lin_lin, equacion_log_lin))
+
+```
+
+Mejor Modelo Identificado: Ambos modelos, Lin-Lin y Log-Lin, ofrecen buenas interpretaciones para diferentes enfoques del análisis:
+
+Lin-Lin es ideal para relaciones lineales directas y es fácil de interpretar.
+
+Log-Lin es útil cuando se busca analizar la relación en términos de cambios porcentuales o exponenciales.
+
+### Zona Oeste
+
+#### Apartamentos
+
+```{r}
+
+modelos_a_resaltar <- c("Lin-Log", "Lin-Log")
+
+extraer_coeficientes <- function(modelo, nombre_modelo) {
+  coefs <- summary(modelo)$coefficients
+  data.frame(
+    Modelo = nombre_modelo,
+    Término = rownames(coefs),
+    Estimación = formatC(coefs[, "Estimate"], format = "f", digits = 4),
+    `Error Estándar` = formatC(coefs[, "Std. Error"], format = "f", digits = 4),
+    `Estadístico t` = formatC(coefs[, "t value"], format = "f", digits = 4),
+    `Valor p` = formatC(coefs[, "Pr(>|t|)"], format = "f", digits = 4)
+  )
+}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_oeste_apt)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_oeste_apt)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_oeste_apt)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_oeste_apt)
+
+tabla_lin_lin <- extraer_coeficientes(modelo_lin_lin, "Lin-Lin")
+tabla_log_log <- extraer_coeficientes(modelo_log_log, "Log-Log")
+tabla_log_lin <- extraer_coeficientes(modelo_log_lin, "Log-Lin")
+tabla_lin_log <- extraer_coeficientes(modelo_lin_log, "Lin-Log")
+
+tabla_comparativa <- rbind(tabla_lin_lin, tabla_log_log, tabla_log_lin, tabla_lin_log)
+
+tabla_comparativa %>%
+  kable(format = "html", 
+        col.names = c("Modelo", "Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+        caption = "") %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(which(tabla_comparativa$Modelo %in% modelos_a_resaltar), background = "#DFF0D8")
+
+```
+<p style="text-align: center;">Tabla 27: Comparación de modelos para Apartamentos en la Zona Oeste</p>
+
+Ecuación del Modelo Lin-Log
+
+Esta ecuación del modelo Lin-Log indica una relación logarítmica entre el área construida y el precio de los apartamentos. La forma logarítmica sugiere que un incremento en el área construida tiene un impacto decreciente en el precio, capturando mejor las relaciones no lineales.
+
+```{r}
+
+equacion_lin_log <- div(
+  h3("Ecuación del Modelo Lin-Log"),
+  tags$p(HTML("Precio Millones = 67.0670 + 40.2908 &times; log(Área Construida)"))
+)
+
+browsable(tagList(equacion_lin_log))
+
+```
+
+
+Mejor Modelo Identificado: El modelo Lin-Log es el mejor modelo para apartamentos en la Zona Oeste, según el análisis de ajuste y los supuestos estadísticos.
+
+El modelo Lin-Log se destaca por su capacidad para manejar relaciones no lineales y proporciona una mejor interpretación económica en términos de cambios porcentuales.
+
+### Zona Sur
+
+#### Apartamentos
+
+```{r}
+
+modelos_a_resaltar <- c("Lin-Lin", "Lin-Lin")
+
+extraer_coeficientes <- function(modelo, nombre_modelo) {
+  coefs <- summary(modelo)$coefficients
+  data.frame(
+    Modelo = nombre_modelo,
+    Término = rownames(coefs),
+    Estimación = formatC(coefs[, "Estimate"], format = "f", digits = 4),
+    `Error Estándar` = formatC(coefs[, "Std. Error"], format = "f", digits = 4),
+    `Estadístico t` = formatC(coefs[, "t value"], format = "f", digits = 4),
+    `Valor p` = formatC(coefs[, "Pr(>|t|)"], format = "f", digits = 4)
+  )
+}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_sur_apt)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_sur_apt)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_sur_apt)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_sur_apt)
+
+tabla_lin_lin <- extraer_coeficientes(modelo_lin_lin, "Lin-Lin")
+tabla_log_log <- extraer_coeficientes(modelo_log_log, "Log-Log")
+tabla_log_lin <- extraer_coeficientes(modelo_log_lin, "Log-Lin")
+tabla_lin_log <- extraer_coeficientes(modelo_lin_log, "Lin-Log")
+
+tabla_comparativa <- rbind(tabla_lin_lin, tabla_log_log, tabla_log_lin, tabla_lin_log)
+
+tabla_comparativa %>%
+  kable(format = "html", 
+        col.names = c("Modelo", "Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+        caption = "") %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(which(tabla_comparativa$Modelo %in% modelos_a_resaltar), background = "#DFF0D8")
+
+```
+<p style="text-align: center;">Tabla 28: Comparación de modelos para Apartamentos en la Zona Sur</p>
+
+Ecuación del Modelo Lin-Lin
+
+Esta ecuación indica una relación lineal directa entre el área construida y el precio de los apartamentos. Es un modelo simple y directo donde el precio aumenta de manera constante a medida que el área construida crece.
+
+```{r}
+
+equacion_lin_lin <- div(
+  h3("Ecuación del Modelo Lin-Lin"),
+  tags$p(HTML("Precio Millones = 199.7297 + 0.5023 &times; Área Construida"))
+)
+
+browsable(tagList(equacion_lin_lin))
+
+```
+
+Mejor Modelo Identificado: El modelo Lin-Lin es el mejor modelo para apartamentos en la Zona Sur, ya que proporciona el mejor ajuste en términos de R² y cumple adecuadamente con los supuestos estadísticos.
+
+#### Casas
+
+```{r}
+
+modelos_a_resaltar <- c("Lin-Lin", "Lin-Lin")
+
+extraer_coeficientes <- function(modelo, nombre_modelo) {
+  coefs <- summary(modelo)$coefficients
+  data.frame(
+    Modelo = nombre_modelo,
+    Término = rownames(coefs),
+    Estimación = formatC(coefs[, "Estimate"], format = "f", digits = 4),
+    `Error Estándar` = formatC(coefs[, "Std. Error"], format = "f", digits = 4),
+    `Estadístico t` = formatC(coefs[, "t value"], format = "f", digits = 4),
+    `Valor p` = formatC(coefs[, "Pr(>|t|)"], format = "f", digits = 4)
+  )
+}
+
+modelo_lin_lin <- lm(`Precio Millones` ~ `Área Construida`, data = df_sur_casa)
+modelo_log_log <- lm(log(`Precio Millones`) ~ log(`Área Construida`), data = df_sur_casa)
+modelo_log_lin <- lm(log(`Precio Millones`) ~ `Área Construida`, data = df_sur_casa)
+modelo_lin_log <- lm(`Precio Millones` ~ log(`Área Construida`), data = df_sur_casa)
+
+tabla_lin_lin <- extraer_coeficientes(modelo_lin_lin, "Lin-Lin")
+tabla_log_log <- extraer_coeficientes(modelo_log_log, "Log-Log")
+tabla_log_lin <- extraer_coeficientes(modelo_log_lin, "Log-Lin")
+tabla_lin_log <- extraer_coeficientes(modelo_lin_log, "Lin-Log")
+
+tabla_comparativa <- rbind(tabla_lin_lin, tabla_log_log, tabla_log_lin, tabla_lin_log)
+
+tabla_comparativa %>%
+  kable(format = "html", 
+        col.names = c("Modelo", "Término", "Estimación", "Error Estándar", "Estadístico t", "Valor p"), 
+        caption = "") %>%
+  kable_styling("striped", full_width = F) %>%
+  row_spec(which(tabla_comparativa$Modelo %in% modelos_a_resaltar), background = "#DFF0D8")
+
+```
+<p style="text-align: center;">Tabla 29: Comparación de modelos para Casas en la Zona Sur</p>
+
+
+Ecuación del Modelo Lin-Lin
+
+Esta ecuación representa una relación lineal directa, donde el precio de las casas aumenta de manera constante a medida que crece el área construida.
+
+
+```{r}
+
+equacion_lin_lin <- div(
+  h3("Ecuación del Modelo Lin-Lin"),
+  tags$p(HTML("Precio Millones = 198.9172 + 0.5056 &times; Área Construida"))
+)
+
+# Mostrar la ecuación del modelo Lin-Lin en HTML
+browsable(tagList(equacion_lin_lin))
+
+```
+
+Debido a su claridad y facilidad de interpretación, el modelo Lin-Lin es una excelente opción para modelar la relación entre el área construida y el precio de las casas.
+
+# INFORME
+
+<p style="text-align: center; font-weight: bold;">INFORME DE MODELOS DE REGRESIÓN PARA LA PREDICCIÓN DE PRECIOS DE VIVIENDA</p>
+
+<p style="text-align: left; font-weight: bold;">RESUMEN EJECUTIVO</p>
+
+En este informe se presenta el análisis detallado de los modelos de regresión lineal y no lineal aplicados a los datos de precios de viviendas en diferentes zonas. El objetivo es identificar el modelo más apropiado para predecir el precio de las propiedades en función del área construida.
+
+<p style="text-align: left; font-weight: bold;">ZONAS ANALIZADAS</p>
+
+Zona Norte:
+
+Apartamentos: El modelo Lin-Lin obtuvo el mejor R² ajustado (0.7618). La ecuación del modelo es:
+
+Precio Millones = 200.6377 + 0.4887×Área Construida
+
+Casas: El modelo Log-Lin fue identificado como el más adecuado para cumplir con los supuestos estadísticos y presentó un R² ajustado alto (0.8667). La ecuación del modelo es:
+
+log(Precio Millones) = 5.3021 + 0.0021×Área Construida
+
+Forma Exponencial: Precio Millones = 𝑒5.3021×𝑒0.0021×Área Construida
+
+Zona Oeste:
+
+Apartamentos: El modelo Lin-Log presentó el mejor R² ajustado (0.7089) y se destacó en el cumplimiento de los supuestos estadísticos. La ecuación del modelo es:
+
+Precio Millones = 67.0670 + 40.2908×log(Área Construida)
+
+Zona Sur:
+
+Apartamentos: El modelo Lin-Lin fue el mejor modelo con un R² ajustado de 0.6991, sugiriendo que la relación lineal directa es más adecuada para esta zona. La ecuación del modelo es:
+
+Precio Millones = 199.7297 + 0.5023×Área Construida
+
+Casas: Se observó que el modelo Lin-Lin es nuevamente el más adecuado con un R² ajustado de 0.8911. La ecuación del modelo es:
+
+Precio Millones = 198.9172 + 0.5056×Área Construida
+
+<p style="text-align: left; font-weight: bold;">PRINCIPALES CARACTERÍSTICAS DE LOS MODELOS SELECCIONADOS</p>
+
+Modelos Lineales (Lin-Lin):
+
+Se aplican de manera efectiva a zonas donde la relación entre el precio y el área construida es proporcional.
+
+Presentan un buen ajuste en la mayoría de las zonas, demostrando ser confiables y fáciles de interpretar.
+Modelos Logarítmicos (Log-Lin y Lin-Log):
+
+Aunque los modelos logarítmicos no fueron los predominantes, mostraron un desempeño adecuado en ciertas zonas específicas.
+Se recomiendan para casos donde el crecimiento del precio no es estrictamente lineal respecto al área construida.
+
+<p style="text-align: left; font-weight: bold;">ANÁLISIS DE SUPUESTOS ESTADÍSTICOS</p>
+
+Se evaluaron los supuestos de normalidad, homocedasticidad e independencia para todos los modelos utilizando pruebas estadísticas como Shapiro-Wilk, Breusch-Pagan y Durbin-Watson:
+
+Zona Norte:
+
+Lin-Lin: Cumple razonablemente con los supuestos estadísticos.
+
+Log-Lin: Supera a otros modelos en el cumplimiento de los supuestos, especialmente en homocedasticidad e independencia.
+
+Zona Oeste:
+
+Lin-Log: Es el modelo que mejor cumple con todos los supuestos estadísticos, validando su elección como el más apropiado.
+
+Zona Sur:
+
+Lin-Lin: Se destaca por su robustez y cumplimiento de los supuestos estadísticos en la mayoría de los casos, particularmente en las pruebas de normalidad.
+
+<p style="text-align: left; font-weight: bold;">RECOMENDACIONES</p>
+
+Utilización de Modelos Lineales: Los modelos Lin-Lin son altamente recomendados para la mayoría de las zonas debido a su alto poder explicativo y su cumplimiento adecuado de los supuestos estadísticos.
+
+Evaluación Continua: Se sugiere realizar una revisión periódica de los modelos y ajustarlos si se detectan cambios significativos en el mercado inmobiliario.
+Optimización de los Modelos Logarítmicos: Considerar ajustes específicos para mejorar los modelos logarítmicos en casos donde se identifique una relación no lineal más fuerte.
+
+# ANEXOS
+
+```{r}
+
+df_no_centro <- df_centro[ , !(colnames(df) %in% c("Zona", "Estrato"))]
+
+kable(summary(df_no_centro), booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 30: Resumen Estadístico para la Zona Centro</p>
+
+Zona Centro: Se caracteriza por tener los precios mínimos de vivienda, con un valor de 207.4 millones de COP y áreas construidas a partir de 40 m². Predominan los apartamentos, con un total de 1,363 unidades, reflejando una tendencia hacia viviendas compactas en un área urbanamente densa.
+
+
+```{r}
+
+df_no_norte <- df_norte[ , !(colnames(df) %in% c("Zona", "Estrato"))]
+
+kable(summary(df_no_norte), booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 31: Resumen Estadístico para la Zona Norte</p>
+
+Zona Norte: Presenta precios más elevados en comparación con otras zonas, con el primer cuartil en 230.7 millones de COP y áreas construidas de al menos 60 m². Esta zona muestra una mayor variedad en los tipos de propiedades, con una mayor presencia de casas (343 unidades), lo que sugiere una preferencia por espacios más amplios.
+
+```{r}
+
+df_no_oeste <- df_oeste[ , !(colnames(df) %in% c("Zona", "Estrato"))]
+
+kable(summary(df_no_oeste), booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 32: Resumen Estadístico para la Zona Oeste</p>
+
+Zona Oeste: Tiene una mediana de precios de 238.8 millones de COP y áreas de construcción que rondan los 75 m². Esto indica que la mitad de las propiedades se encuentran por debajo de este precio, sugiriendo una oferta variada y competitiva, posiblemente atractiva para compradores en busca de opciones asequibles.
+
+```{r}
+
+df_no_oriente <- df_oriente[ , !(colnames(df) %in% c("Zona", "Estrato"))]
+
+kable(summary(df_no_oriente), booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 33: Resumen Estadístico para la Zona Oriente</p>
+
+Zona Oriente: Con un precio promedio de 243.7 millones de COP y áreas construidas promediando 87.63 m², esta zona ofrece propiedades ligeramente más costosas y espaciosas, lo cual puede reflejar una demanda más alta en esta área.
+
+```{r}
+
+df_no_sur <- df_sur[ , !(colnames(df) %in% c("Zona", "Estrato"))]
+
+kable(summary(df_no_sur), booktabs = TRUE) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = F)
+
+```
+
+<p style="text-align: center;">Tabla 34: Resumen Estadístico para la Zona Sur</p>
+
+Zona Sur: Destaca por tener precios más altos en su tercer cuartil (251.5 millones de COP) y áreas de 98 m², lo que indica que las propiedades en esta zona tienden a ser más costosas, posiblemente debido a características superiores o mayor demanda.
+
+# BIBLIOGRAFÍA
+Kutner, M. H., Nachtsheim, C. J., & Neter, J. (2004). Applied Linear Regression Models (4th ed.). McGraw-Hill/Irwin.
+
+Field, A. (2013). Discovering Statistics Using R. SAGE Publications.
+
+James, G., Witten, D., Hastie, T., & Tibshirani, R. (2013). An Introduction to Statistical Learning with Applications in R. Springer.
+
+Wickham, H., & Grolemund, G. (2016). R for Data Science: Import, Tidy, Transform, Visualize, and Model Data. O'Reilly Media.
+
+Kuhn, M., & Johnson, K. (2013). Applied Predictive Modeling. Springer.
+
+Hyndman, R. J., & Athanasopoulos, G. (2018). Forecasting: Principles and Practice. OTexts.
+
+Silverman, B. W. (1986). Density Estimation for Statistics and Data Analysis. Chapman & Hall/CRC.
+
+Fox, J., & Weisberg, S. (2018). An R Companion to Applied Regression (3rd ed.). SAGE Publications.
+
+Yule, G. U. (1926). Why do we Sometimes get Nonsense-Correlations between Time-Series? A Study in Sampling and the Nature of Time-Series. Journal of the Royal Statistical Society, 89(1), 1-63.
+
+Hamilton, J. D. (1994). Time Series Analysis. Princeton University Press.
+
